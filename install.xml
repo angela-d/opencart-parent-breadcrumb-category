@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<modification>
+    <name>Parent Breadcrumb Category</name>
+    <code>parent_breadcrumb_categoryv100</code>
+    <description>Add the parent category to breadcrumbs and increase SEO visibility.</description>
+    <version>1.0</version>
+    <author>Angela</author>
+    <link>https://github.com/angela-d</link>
+
+    <file path="catalog/model/catalog/category.php">
+      <operation error="skip" info="Add the necessary query to get the parent ID.">
+          <search ><![CDATA[
+            public function getTotalCategoriesByCategoryId($parent_id = 0) {
+            ]]></search>
+          <add position="before"><![CDATA[
+            public function getParent($subcat) {
+          		$query = $this->db->query("SELECT * FROM " . DB_PREFIX . "category WHERE category_id = " . (int)$subcat);
+
+          		if ($query->num_rows){
+          			$query = $this->db->query("SELECT DISTINCT * FROM " . DB_PREFIX . "category c LEFT JOIN " . DB_PREFIX . "category_description cd ON (c.category_id = cd.category_id) LEFT JOIN " . DB_PREFIX . "category_to_store c2s ON (c.category_id = c2s.category_id) WHERE c.category_id = '" . $query->row['category_id'] . "' AND c.parent_id !='0' AND cd.language_id = '" . (int)$this->config->get('config_language_id') . "' AND c2s.store_id = '" . (int)$this->config->get('config_store_id') . "' AND c.status = '1'");
+          		}
+          		if ($query->num_rows && $query->num_rows){
+          			return $query->row;
+          		}
+          	}
+          ]]></add>
+      </operation>
+    </file>
+    <file path="catalog/controller/product/product.php">
+      <operation error="skip" info="The most important bits where the magic happens.">
+          <search ><![CDATA[
+            $this->load->model('catalog/product');
+            ]]></search>
+          <add position="after"><![CDATA[
+            $this->load->model('catalog/category');
+
+            $pull_category = $this->model_catalog_product->getCategories($this->request->get['product_id']);
+
+            $cat_ids = '';
+						if(!empty($pull_category)){
+							foreach ($pull_category as $catid) {
+								if ($catid =='0') {
+									unset($catid);
+								}
+								if ($catid['category_id'] !=='0'){
+									$cat_ids .= $catid['category_id'].'_';
+								}
+							}
+
+              $path        = '';
+              $parts       = array(explode('_', (string)$cat_ids));
+        			$flip_array  = array_pop($parts);
+        			$category_id = array_reverse($flip_array);
+
+        			//skip 0, which would be the root category
+              if(isset($category_id[1])){
+        				$par_category = $this->model_catalog_category->getParent($category_id[1]);
+
+        	      if(!isset($this->request->get['path'])){
+        					if (isset($par_category)) {
+        						$url = '';
+        					}
+
+        					$data['breadcrumbs'] = array();
+
+        					$data['breadcrumbs'][] = array(
+        						'text' => $this->language->get('text_home'),
+        						'href' => $this->url->link('common/home')
+        					);
+
+        					if(isset($category_id[1])){
+        						$category_info = $this->model_catalog_category->getCategory($category_id[1]);
+
+        							if(isset($category_info)){
+        								$categoryParent = isset($par_category['category_id']) ? $par_category['category_id'] : '0';
+
+        								$data['breadcrumbs'][] = array(
+        									'text'      => isset($category_info['name']) ? $category_info['name'] : '',
+        									'href'      => $this->url->link('product/category', 'path=' . $category_id[1]),
+        									'separator' => $this->language->get('text_separator')
+        								);
+        							}
+        					}
+              	}
+            	}
+        		}
+          ]]></add>
+      </operation>
+    </file>
+</modification>
